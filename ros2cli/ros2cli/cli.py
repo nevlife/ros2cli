@@ -22,9 +22,16 @@ import sys
 from rclpy.executors import ExternalShutdownException
 
 from ros2cli.command import add_subparsers_on_demand
+from ros2cli.entry_points import _cache_entry_points
 
 
 def main(*, script_name='ros2', argv=None, description=None, extension=None):
+    with _cache_entry_points():
+        return _main(
+            script_name=script_name, argv=argv, description=description, extension=extension)
+
+
+def _main(*, script_name, argv, description, extension):
     if description is None:
         description = f'{script_name} is an extensible command-line tool ' \
             'for ROS 2.'

@@ -16,6 +16,7 @@ import io
 import os
 from unittest.mock import patch
 
+import ros2cli.entry_points as entry_points
 import ros2cli.helpers
 from ros2cli.helpers import check_discovery_configuration
 
@@ -104,3 +105,35 @@ def test_check_discovery_configuration_not_set():
 
     output = stderr_capture.getvalue()
     assert output == '', 'Expected no warning output'
+
+
+def test_entry_point_snapshot_scope():
+    """Reuse discovery across groups only within one CLI invocation."""
+    first = entry_points.importlib_metadata.EntryPoint(
+        name='first', value='module:first', group='one')
+    second = entry_points.importlib_metadata.EntryPoint(
+        name='second', value='module:second', group='two')
+    discovered = entry_points.importlib_metadata.EntryPoints([first, second])
+    with patch.object(entry_points.importlib_metadata, 'entry_points',
+                      return_value=discovered) as discover:
+        with entry_points._cache_entry_points():
+            assert entry_points.get_entry_points('one') == {'first': first}
+            assert entry_points.get_entry_points('two') == {'second': second}
+            assert discover.call_count == 1
+            entry_points.get_entry_points('one').clear()
+            assert entry_points.get_entry_points('one') == {'first': first}
+        entry_points.get_entry_points('one')
+        assert discover.call_count == 2
+        with entry_points._cache_entry_points():
+            entry_points.get_entry_points('one')
+        assert discover.call_count == 3
+
+
+def test_entry_point_snapshot_restored_after_exception():
+    """Discard the invocation snapshot even when command parsing exits."""
+    try:
+        with entry_points._cache_entry_points():
+            raise SystemExit(0)
+    except SystemExit:
+        pass
+    assert entry_points._entry_points_cache is None
