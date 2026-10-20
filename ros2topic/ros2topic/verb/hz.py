@@ -39,11 +39,11 @@ import rclpy
 
 from rclpy.clock import Clock
 from rclpy.clock import ClockType
-from rclpy.qos import qos_profile_sensor_data
 from ros2cli.node.direct import add_arguments as add_direct_node_arguments
 from ros2cli.node.direct import DirectNode
 from ros2topic.api import get_msg_class
 from ros2topic.api import positive_int
+from ros2topic.api import sensor_qos_matching_publishers
 from ros2topic.api import TopicNameCompleter
 from ros2topic.verb import VerbExtension
 
@@ -265,7 +265,7 @@ def _rostopic_hz(node, topic, window_size=DEFAULT_WINDOW_SIZE, filter_expr=None,
         msg_class,
         topic,
         functools.partial(rt.callback_hz, topic=topic),
-        qos_profile_sensor_data,
+        sensor_qos_matching_publishers(node, topic),
         raw=filter_expr is None)
 
     while rclpy.ok():

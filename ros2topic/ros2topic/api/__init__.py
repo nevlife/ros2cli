@@ -14,6 +14,7 @@
 
 from argparse import ArgumentParser
 from argparse import ArgumentTypeError
+import copy
 from time import sleep
 from typing import Optional
 
@@ -207,6 +208,21 @@ def profile_configure_short_keys(
             profile.depth = 1
 
 
+def sensor_qos_matching_publishers(node, topic_name: str) -> rclpy.qos.QoSProfile:
+    """
+    Return the sensor data profile, reliable when every publisher of the topic is.
+
+    A best-effort reader loses a whole message when one of its fragments is lost, so messages of
+    several MiB sent over UDP may never arrive at all.
+    """
+    profile = copy.copy(rclpy.qos.qos_profile_sensor_data)
+    infos = node.get_publishers_info_by_topic(topic_name)
+    if infos and all(info.qos_profile.reliability == rclpy.qos.QoSReliabilityPolicy.RELIABLE
+                     for info in infos):
+        profile.reliability = rclpy.qos.QoSReliabilityPolicy.RELIABLE
+    return profile
+
+
 def qos_profile_from_short_keys(
     preset_profile: str, reliability: Optional[str] = None, durability: Optional[str] = None,
     depth: Optional[int] = None, history: Optional[str] = None, liveliness: Optional[str] = None,
@@ -214,7 +230,8 @@ def qos_profile_from_short_keys(
 ) -> rclpy.qos.QoSProfile:
     """Construct a QoSProfile given the name of a preset, and optional overrides."""
     # Build a QoS profile based on user-supplied arguments
-    profile = rclpy.qos.QoSPresetProfiles.get_from_short_key(preset_profile)
+    # The presets are shared module-level profiles; configuring one in place changes it for all.
+    profile = copy.copy(rclpy.qos.QoSPresetProfiles.get_from_short_key(preset_profile))
     profile_configure_short_keys(
         profile, reliability, durability, depth, history, liveliness, liveliness_lease_duration_s)
     return profile

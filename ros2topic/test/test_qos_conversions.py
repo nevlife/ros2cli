@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
 import rclpy
 from rclpy.duration import Duration
 
 from ros2topic.api import qos_profile_from_short_keys
+from ros2topic.api import sensor_qos_matching_publishers
+from std_msgs.msg import Empty
 
 
 def test_profile_conversion():
@@ -29,3 +33,29 @@ def test_profile_conversion():
     assert profile.history == rclpy.qos.QoSHistoryPolicy.KEEP_LAST
     assert profile.liveliness == rclpy.qos.QoSLivelinessPolicy.MANUAL_BY_TOPIC
     assert profile.liveliness_lease_duration == Duration(seconds=10.3)
+
+
+def test_sensor_qos_follows_publisher_reliability():
+    context = rclpy.context.Context()
+    rclpy.init(context=context)
+    node = rclpy.create_node('sensor_qos_test', context=context)
+
+    def publishers_seen(count):
+        end = time.monotonic() + 5
+        while node.count_publishers('/sensor_qos_a') < count and time.monotonic() < end:
+            time.sleep(0.01)
+
+    try:
+        reliable = rclpy.qos.QoSReliabilityPolicy.RELIABLE
+        best_effort = rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT
+        assert sensor_qos_matching_publishers(node, '/sensor_qos_a').reliability == best_effort
+        node.create_publisher(Empty, '/sensor_qos_a', 10)
+        publishers_seen(1)
+        assert sensor_qos_matching_publishers(node, '/sensor_qos_a').reliability == reliable
+        node.create_publisher(Empty, '/sensor_qos_a', rclpy.qos.qos_profile_sensor_data)
+        publishers_seen(2)
+        assert sensor_qos_matching_publishers(node, '/sensor_qos_a').reliability == best_effort
+        assert rclpy.qos.qos_profile_sensor_data.reliability == best_effort
+    finally:
+        node.destroy_node()
+        rclpy.shutdown(context=context)
