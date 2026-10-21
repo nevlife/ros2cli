@@ -30,9 +30,11 @@
 # https://github.com/ros/ros_comm/blob/6e5016f4b2266d8a60c9a1e163c4928b8fc7115e/tools/rostopic/src/rostopic/__init__.py
 
 from collections import defaultdict
+from collections import deque
 
 import functools
 import math
+import operator
 import threading
 
 import rclpy
@@ -44,6 +46,7 @@ from ros2cli.node.direct import DirectNode
 from ros2topic.api import get_msg_class
 from ros2topic.api import positive_int
 from ros2topic.api import sensor_qos_matching_publishers
+from ros2topic.api import spin_until_shutdown
 from ros2topic.api import TopicNameCompleter
 from ros2topic.verb import VerbExtension
 
@@ -111,18 +114,20 @@ class ROSTopicHz(object):
         self.last_printed_tn = 0
         self.msg_t0 = -1
         self.msg_tn = 0
-        self.times = []
+        self.window_size = window_size
+        self.times = self._window()
         self._last_printed_tn = defaultdict(int)
         self._msg_t0 = defaultdict(lambda: -1)
         self._msg_tn = defaultdict(int)
-        self._times = defaultdict(list)
+        self._times = defaultdict(self._window)
         self.filter_expr = filter_expr
         self.use_wtime = use_wtime
 
-        self.window_size = window_size
-
         # Clock that has support for ROS time.
         self._clock = node.get_clock()
+
+    def _window(self, values=()):
+        return deque(values, maxlen=self.window_size if self.window_size >= 0 else None)
 
     def get_last_printed_tn(self, topic=None):
         if topic is None:
@@ -160,6 +165,7 @@ class ROSTopicHz(object):
         return self._times[topic]
 
     def set_times(self, value, topic=None):
+        value = self._window(value)
         if topic is None:
             self.times = value
         self._times[topic] = value
@@ -196,9 +202,6 @@ class ROSTopicHz(object):
                 self.get_times(topic=topic).append(curr - self.get_msg_tn(topic=topic))
                 self.set_msg_tn(curr, topic=topic)
 
-            if len(self.get_times(topic=topic)) > self.window_size:
-                self.get_times(topic=topic).pop(0)
-
     def get_hz(self, topic=None):
         """
         Calculate the average publishing rate.
@@ -219,11 +222,12 @@ class ROSTopicHz(object):
             # Get frequency every one minute
             times = self.get_times(topic=topic)
             n = len(times)
-            mean = sum(times) / n
+            total = sum(times)
+            mean = total / n
             rate = 1. / mean if mean > 0. else 0
 
-            # std dev
-            std_dev = math.sqrt(sum((x - mean)**2 for x in times) / n)
+            # std dev from integer sums, which C loops compute without a Python step per sample
+            std_dev = math.sqrt((n * sum(map(operator.mul, times, times)) - total * total) / n**2)
 
             # min and max
             max_delta = max(times)
@@ -268,10 +272,10 @@ def _rostopic_hz(node, topic, window_size=DEFAULT_WINDOW_SIZE, filter_expr=None,
         sensor_qos_matching_publishers(node, topic),
         raw=filter_expr is None)
 
-    while rclpy.ok():
-        rclpy.spin_once(node)
-        rt.print_hz(topic)
+    timer = node.create_timer(0.1, functools.partial(rt.print_hz, topic))
+    spin_until_shutdown(node)
 
+    node.destroy_timer(timer)
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
     return 0

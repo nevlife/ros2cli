@@ -29,6 +29,7 @@
 # This file is originally from:
 # https://github.com/ros/ros_comm/blob/6e5016f4b2266d8a60c9a1e163c4928b8fc7115e/tools/rostopic/src/rostopic/__init__.py
 
+from collections import deque
 import math
 
 import rclpy
@@ -39,6 +40,7 @@ from ros2cli.node.direct import add_arguments as add_direct_node_arguments
 from ros2cli.node.direct import DirectNode
 from ros2topic.api import get_msg_class
 from ros2topic.api import positive_int
+from ros2topic.api import spin_until_shutdown
 from ros2topic.api import TopicNameCompleter
 from ros2topic.verb import VerbExtension
 
@@ -79,9 +81,8 @@ class ROSTopicDelay(object):
         self.last_msg_tn = 0
         self.msg_t0 = -1.
         self.msg_tn = 0
-        self.delays = []
-
         self.window_size = window_size
+        self.delays = deque(maxlen=window_size)
 
         self._clock = node.get_clock()
 
@@ -100,22 +101,19 @@ class ROSTopicDelay(object):
             if curr_rostime.nanoseconds == 0:
                 if len(self.delays) > 0:
                     print('time has reset, resetting counters')
-                    self.delays = []
+                    self.delays.clear()
                 return
 
             curr = curr_rostime.nanoseconds
             if self.msg_t0 < 0 or self.msg_t0 > curr:
                 self.msg_t0 = curr
                 self.msg_tn = curr
-                self.delays = []
+                self.delays.clear()
             else:
                 # store the duration nanoseconds in self.delays
                 duration = (curr_rostime - Time.from_msg(msg.header.stamp))
                 self.delays.append(duration.nanoseconds)
                 self.msg_tn = curr
-
-            if len(self.delays) > self.window_size:
-                self.delays.pop(0)
 
     def get_delay(self):
         """
@@ -178,10 +176,9 @@ def _rostopic_delay(node, topic, window_size=DEFAULT_WINDOW_SIZE):
         qos_profile_sensor_data)
 
     timer = node.create_timer(1, rt.print_delay)
-    while rclpy.ok():
-        rclpy.spin_once(node)
+    spin_until_shutdown(node)
 
     node.destroy_timer(timer)
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
     return 0

@@ -23,7 +23,9 @@ from argcomplete import CompletionFinder
 import rclpy
 
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.expand_topic_name import expand_topic_name
+from rclpy.experimental import EventsExecutor
 from rclpy.topic_or_service_is_hidden import topic_or_service_is_hidden
 from rclpy.validate_full_topic_name import validate_full_topic_name
 from ros2cli.node.strategy import NodeStrategy
@@ -206,6 +208,20 @@ def profile_configure_short_keys(
         if (profile.durability == rclpy.qos.QoSDurabilityPolicy.TRANSIENT_LOCAL
                 and profile.depth == 0):
             profile.depth = 1
+
+
+def spin_until_shutdown(node):
+    """Spin the node until its context is shut down."""
+    # rclpy.spin_once rebuilds a wait set per message, which limits hz, bw and delay at high
+    # message rates (ros2/ros2cli#1043).
+    executor = EventsExecutor(context=node.context)
+    executor.add_node(node)
+    try:
+        executor.spin()
+    except ExternalShutdownException:
+        pass
+    finally:
+        executor.shutdown()
 
 
 def sensor_qos_matching_publishers(node, topic_name: str) -> rclpy.qos.QoSProfile:
