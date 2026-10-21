@@ -16,22 +16,37 @@
 import argparse
 import builtins
 import functools
+import os
 import signal
 import sys
-
-from rclpy.executors import ExternalShutdownException
 
 from ros2cli.command import add_subparsers_on_demand
 from ros2cli.entry_points import _cache_entry_points
 
 
+def _grow_fd_table():
+    # Linux grows the fd table of a multithreaded process only after an RCU grace period
+    # (several ms). rclpy loads LTTng, which starts threads, and launch then opens a few pipes
+    # per process, so grow the table now while the process is still single-threaded.
+    import resource
+    limit = min(resource.getrlimit(resource.RLIMIT_NOFILE)[0], 4096)
+    fd = os.open(os.devnull, os.O_RDONLY)
+    if fd < limit - 1:
+        os.close(os.dup2(fd, limit - 1))
+    os.close(fd)
+
+
 def main(*, script_name='ros2', argv=None, description=None, extension=None):
+    if sys.platform == 'linux':
+        _grow_fd_table()
     with _cache_entry_points():
         return _main(
             script_name=script_name, argv=argv, description=description, extension=extension)
 
 
 def _main(*, script_name, argv, description, extension):
+    from rclpy.executors import ExternalShutdownException
+
     if description is None:
         description = f'{script_name} is an extensible command-line tool ' \
             'for ROS 2.'
