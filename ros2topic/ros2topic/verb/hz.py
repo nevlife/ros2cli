@@ -48,6 +48,7 @@ from ros2topic.api import positive_int
 from ros2topic.api import sensor_qos_matching_publishers
 from ros2topic.api import spin_until_shutdown
 from ros2topic.api import TopicNameCompleter
+from ros2topic.eval.message_filter import make_filter
 from ros2topic.verb import VerbExtension
 
 DEFAULT_WINDOW_SIZE = 10000
@@ -91,14 +92,7 @@ class HzVerb(VerbExtension):
 
 def main(args):
     topic = args.topic_name
-    if args.filter_expr:
-        def expr_eval(expr):
-            def eval_fn(m):
-                return eval(expr)
-            return eval_fn
-        filter_expr = expr_eval(args.filter_expr)
-    else:
-        filter_expr = None
+    filter_expr = make_filter(args.filter_expr) if args.filter_expr else None
 
     with DirectNode(args) as node:
         return _rostopic_hz(

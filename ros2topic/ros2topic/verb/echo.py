@@ -32,6 +32,7 @@ from ros2topic.api import get_msg_class
 from ros2topic.api import positive_float
 from ros2topic.api import qos_profile_from_short_keys
 from ros2topic.api import TopicNameCompleter
+from ros2topic.eval.message_filter import make_filter
 from ros2topic.verb import VerbExtension
 from rosidl_runtime_py import message_to_csv
 from rosidl_runtime_py import message_to_yaml
@@ -188,7 +189,7 @@ class EchoVerb(VerbExtension):
 
         self.filter_fn = None
         if args.filter_expr:
-            self.filter_fn = _expr_eval(args.filter_expr)
+            self.filter_fn = make_filter(args.filter_expr)
 
         self.future = None
         if args.timeout or args.once:
@@ -307,12 +308,6 @@ class EchoVerb(VerbExtension):
                 submsg, truncate_length=self.truncate_length,
                 no_arr=self.no_arr, no_str=self.no_str, flow_style=self.flow_style),
             end='---\n')
-
-
-def _expr_eval(expr):
-    def eval_fn(m):
-        return eval(expr)
-    return eval_fn
 
 
 def _message_lost_event_callback(message_lost_status):
