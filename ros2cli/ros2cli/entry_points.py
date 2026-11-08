@@ -14,7 +14,6 @@
 # limitations under the License.
 
 from collections import defaultdict
-from contextlib import contextmanager
 import logging
 
 try:
@@ -32,7 +31,6 @@ Those need to be declared using this group name.
 EXTENSION_POINT_GROUP_NAME = 'ros2cli.extension_point'
 
 logger = logging.getLogger(__name__)
-_entry_points_cache = None
 
 
 def get_all_entry_points():
@@ -56,17 +54,6 @@ def get_all_entry_points():
     return entry_points
 
 
-@contextmanager
-def _cache_entry_points():
-    global _entry_points_cache
-    previous = _entry_points_cache
-    _entry_points_cache = {}
-    try:
-        yield
-    finally:
-        _entry_points_cache = previous
-
-
 def get_entry_points(group_name):
     """
     Get the entry points for a specific group.
@@ -76,12 +63,7 @@ def get_entry_points(group_name):
       to ``EntryPoint`` instances
     :rtype: dict
     """
-    if _entry_points_cache is None:
-        entry_points_impl = importlib_metadata.entry_points()
-    else:
-        if 'all' not in _entry_points_cache:
-            _entry_points_cache['all'] = importlib_metadata.entry_points()
-        entry_points_impl = _entry_points_cache['all']
+    entry_points_impl = importlib_metadata.entry_points()
     if hasattr(entry_points_impl, 'select'):
         groups = entry_points_impl.select(group=group_name)
     else:
