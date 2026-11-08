@@ -39,7 +39,6 @@ from ros2cli.node.direct import DirectNode
 from ros2topic.api import get_msg_class
 from ros2topic.api import positive_int
 from ros2topic.api import sensor_qos_matching_publishers
-from ros2topic.api import spin_until_shutdown
 from ros2topic.api import TopicNameCompleter
 from ros2topic.verb import VerbExtension
 
@@ -177,9 +176,10 @@ def _rostopic_bw(node, topic, window_size=DEFAULT_WINDOW_SIZE):
 
     print(f'Subscribed to [{topic}]')
     timer = node.create_timer(1, rt.print_bw)
-    spin_until_shutdown(node)
+    while rclpy.ok():
+        rclpy.spin_once(node)
 
     node.destroy_timer(timer)
     node.destroy_node()
-    rclpy.try_shutdown()
+    rclpy.shutdown()
     return 0
